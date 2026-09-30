@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Асық ату</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html,body{height:100%;margin:0;background:#2b1d14;color:#f6ecd6;font-family:Georgia,"Times New Roman",serif;touch-action:none;user-select:none;-webkit-user-select:none;overflow:hidden}
+#app{position:relative;height:100%;display:flex;flex-direction:column;align-items:center}
+#hud{width:100%;max-width:480px;display:flex;justify-content:space-between;padding:8px 12px;box-sizing:border-box;font-size:14px}
+#hud b{color:#f2b33d}
+canvas{display:block;border-radius:10px;box-shadow:0 4px 24px #0008}
+#ov{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#140c06e6;padding:16px;box-sizing:border-box}
+#ov .p{max-width:380px;background:#3b2818;border:2px solid #c9922f;border-radius:14px;padding:20px;text-align:left;line-height:1.45;font-size:15px}
+#ov h1{margin:0 0 4px;color:#f2b33d;font-size:30px;text-align:center}
+#ov h2{margin:0 0 10px;text-align:center;color:#f2b33d}
+#ov ul{padding-left:18px;margin:8px 0}
+#ov button{display:block;margin:14px auto 0;background:#c9922f;color:#2b1d14;border:0;border-radius:8px;padding:12px 28px;font:bold 17px Georgia,serif;cursor:pointer}
+.sub{text-align:center;opacity:.8;font-size:13px}
+#hud span{background:#3b2818;border:1px solid #c9922f88;border-radius:20px;padding:3px 10px}
+#ov .p{background:linear-gradient(#4a3220,#33200f);box-shadow:0 8px 40px #000a}
+#ov input{display:block;width:100%;box-sizing:border-box;margin:8px 0;padding:10px;border-radius:8px;border:1px solid #c9922f;background:#2b1d14;color:#f6ecd6;font:16px Georgia,serif}
+#ov button.alt{background:transparent;color:#f2b33d;border:1px solid #c9922f;margin-top:8px;font-size:15px;padding:9px 22px}
+</style></head><body>
+<div id="app"><div id="hud"></div><canvas id="c"></canvas><div id="ov"></div></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+const W=400,H=620,cv=document.getElementById('c'),g=cv.getContext('2d'),ov=document.getElementById('ov'),hud=document.getElementById('hud');
+cv.width=W;cv.height=H;
+const F={x:30,y:50,w:340,h:300},LINE=490,S0={x:200,y:525},RA=13,RS=17,KP=13.8,MAXP=80;
+const ring=[[200,200]];for(let i=0;i<8;i++)ring.push([200+62*Math.cos(i*Math.PI/4),200+62*Math.sin(i*Math.PI/4)]);
+const LV=[
+ {n:'Ряд',t:6,p:[[110,200],[155,200],[200,200],[245,200],[290,200]]},
+ {n:'Пирамида',t:6,p:[[200,135],[180,170],[220,170],[160,205],[200,205],[240,205]]},
+ {n:'Кольцо',t:7,p:ring}];
+const TUT={n:'Обучение',t:99,p:[[150,230],[200,230],[250,230]]};
+const seen=()=>{try{return localStorage.getItem('asyk_seen')}catch(e){return 1}};
+let S={lv:0,score:0,throws:0,asy:[],saka:{x:S0.x,y:S0.y,vx:0,vy:0,r:RS,m:2.2},phase:'menu',tut:false,tn:0,combo:0,msg:'',mt:0},drag=null,best=0;
+try{best=+localStorage.getItem('asyk_best')||0}catch(e){}
+function say(m){S.msg=m;S.mt=1.4}
+function resetSaka(){S.saka={x:S0.x,y:S0.y,vx:0,vy:0,r:RS,m:2.2}}
+function loadLevel(){if(S.lv>0)S.tut=false;const L=LV[S.lv];S.throws=L.t+(S.carry||0);S.carry=0;const c=S.throws-L.t;setSaved({lv:S.lv,score:S.score,clears:S.clears,carry:c});S.asy=L.p.map((p,i)=>({x:p[0],y:p[1],vx:0,vy:0,r:RA,m:1,out:false,fade:1,ang:(i*1.7)%3}));resetSaka();S.phase='aim';say('Этап '+(S.lv+1)+': '+L.n+(c?' (+'+c+' бросков)':''))}
+function start(tut){if(tut===true)try{localStorage.setItem('asyk_seen',1)}catch(e){}S.carry=0;S.clears=0;S.tut=tut===true;S.tn=0;S.lv=0;S.score=0;ov.style.display='none';loadLevel()}
+function menu(){}
+function finish(){S.phase='over';let r=S.score>=140?'Шебер — мастер!':S.score>=90?'Мерген — меткий стрелок!':'Бастаушы — новичок';
+ const nb=S.score>best;if(nb){best=S.score;try{localStorage.setItem('asyk_best',best)}catch(e){}}setSaved(null);saveResult();
+ ov.style.display='flex';ov.innerHTML=`<div class="p"><h2>${S.score>=90?'Победа!':'Раунд завершён'}</h2><div style="text-align:center;font-size:40px;color:#f2b33d">${S.score}</div><div class="sub">очков${nb?' — новый рекорд!':''}</div><p style="text-align:center">Звание: <b>${r}</b><br>Рекорд: ${best}</p><button id="go">Сыграть ещё</button></div>`;document.getElementById('go').onclick=start}
+function next(){S.lv++;if(S.lv>=LV.length)finish();else loadLevel()}
+function endThrow(){S.phase='wait';const c=S.combo;
+ if(c>1){const b=5*(c-1);S.score+=b;say('Комбо ×'+c+'! +'+(10*c+b))}else say(c?'+10':'Мимо!');
+ const left=S.asy.filter(a=>!a.out).length;
+ if(!left){S.clears++;if(S.lv>=LV.length-1){const b=S.throws*10;S.score+=b;setTimeout(()=>say('Поле чисто! бонус +'+b),700)}else{S.carry=S.throws;setTimeout(()=>say(S.throws?'Поле чисто! +'+S.throws+' бросков дальше':'Поле чисто!'),700)}}
+ setTimeout(()=>{if(!left||S.throws<=0)next();else{resetSaka();S.phase='aim'}},left?1000:1900)}
+function step(dt){
+ const all=[S.saka,...S.asy];
+ for(const b of all){const d=Math.exp(-(b===S.saka?1.0:2.5)*dt);b.x+=b.vx*dt;b.y+=b.vy*dt;b.vx*=d;b.vy*=d;if(Math.hypot(b.vx,b.vy)<8)b.vx=b.vy=0;if(b.out)b.fade-=dt*1.5}
+ const s=S.saka;
+ if(s.x<s.r){s.x=s.r;s.vx=Math.abs(s.vx)*.6}if(s.x>W-s.r){s.x=W-s.r;s.vx=-Math.abs(s.vx)*.6}
+ if(s.y<s.r){s.y=s.r;s.vy=Math.abs(s.vy)*.6}if(s.y>H-s.r){s.y=H-s.r;s.vy=-Math.abs(s.vy)*.6}
+ const bs=all.filter(b=>!b.out);
+ for(let i=0;i<bs.length;i++)for(let j=i+1;j<bs.length;j++){
+  const a=bs[i],b=bs[j],dx=b.x-a.x,dy=b.y-a.y,dd=Math.hypot(dx,dy),m=a.r+b.r;
+  if(dd<m&&dd>0){const nx=dx/dd,ny=dy/dd,ov2=m-dd,tm=a.m+b.m;
+   a.x-=nx*ov2*b.m/tm;a.y-=ny*ov2*b.m/tm;b.x+=nx*ov2*a.m/tm;b.y+=ny*ov2*a.m/tm;
+   const rv=(b.vx-a.vx)*nx+(b.vy-a.vy)*ny;
+   if(rv<-120)hit(a.x+nx*a.r,a.y+ny*a.r,-rv);
+   if(rv<0){const j2=-1.85*rv/(1/a.m+1/b.m);a.vx-=j2*nx/a.m;a.vy-=j2*ny/a.m;b.vx+=j2*nx/b.m;b.vy+=j2*ny/b.m}}}
+ for(const a of S.asy)if(!a.out&&(a.x<F.x||a.x>F.x+F.w||a.y<F.y||a.y>F.y+F.h)){a.out=true;S.score+=10;S.combo++;boom(a.x,a.y)}
+}
+function pt(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*W/r.width,y:(e.clientY-r.top)*H/r.height}}
+cv.addEventListener('pointerdown',e=>{if(S.phase==='aim'){drag=pt(e);cv.setPointerCapture(e.pointerId)}});
+cv.addEventListener('pointermove',e=>{if(drag)drag=pt(e)});
+function release(){if(!drag)return;const s=S.saka,dx=s.x-drag.x,dy=s.y-drag.y,l=Math.hypot(dx,dy);drag=null;
+ if(l<14)return;const p=Math.min(l,MAXP);const bk=1;s.vx=dx/l*p*KP*bk;s.vy=dy/l*p*KP*bk;S.throws--;S.tn++;S.combo=0;S.phase='fly'}
+cv.addEventListener('pointerup',release);cv.addEventListener('pointercancel',()=>{drag=null});
+function fit(){const a=document.getElementById('app'),ah=a.clientHeight-hud.offsetHeight-8,sc=Math.min(a.clientWidth/W,ah/H);cv.style.width=W*sc+'px';cv.style.height=H*sc+'px'}
+addEventListener('resize',fit);
+let SH=0,AC;function thud(v){try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();AC.resume();const o=AC.createOscillator(),gn=AC.createGain(),t=AC.currentTime;o.type='triangle';o.frequency.setValueAtTime(240+Math.min(v,900)*.2,t);o.frequency.exponentialRampToValueAtTime(60,t+.12);gn.gain.setValueAtTime(Math.min(.4,v/1500),t);gn.gain.exponentialRampToValueAtTime(.001,t+.15);o.connect(gn);gn.connect(AC.destination);o.start();o.stop(t+.16)}catch(e){}}
+function hit(x,y,v){SH=Math.max(SH,Math.min(9,v/110));thud(v);for(let i=0;i<Math.min(10,v/80);i++){const a=Math.random()*6.28,sp=40+Math.random()*120;P.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,l:.7,c:'#fff3c4'})}}
+const P=[];function boom(x,y){for(let i=0;i<16;i++){const a=Math.random()*6.28,v=60+Math.random()*150;P.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,l:1,c:i%2?'#f2b33d':'#fff3c4'})}}
+const BG=document.createElement('canvas');BG.width=W;BG.height=H;
+(function(){const b=BG.getContext('2d');let gr=b.createLinearGradient(0,0,0,H);gr.addColorStop(0,'#ecd4a0');gr.addColorStop(1,'#c9a566');b.fillStyle=gr;b.fillRect(0,0,W,H);
+ for(let i=0;i<300;i++){b.fillStyle=`rgba(90,60,25,${Math.random()*.13})`;b.fillRect(Math.random()*W,Math.random()*H,2,2)}
+ b.fillStyle='#0003';b.fillRect(F.x+4,F.y+7,F.w,F.h);
+ gr=b.createLinearGradient(0,F.y,0,F.y+F.h);gr.addColorStop(0,'#bf9050');gr.addColorStop(1,'#a97a3e');b.fillStyle=gr;b.fillRect(F.x,F.y,F.w,F.h);
+ b.strokeStyle='#ffe6b422';b.lineWidth=2;for(const r of [110,70,34]){b.beginPath();b.moveTo(200,200-r);b.lineTo(200+r,200);b.lineTo(200,200+r);b.lineTo(200-r,200);b.closePath();b.stroke()}
+ b.strokeStyle='#8c2a1a';b.lineWidth=12;b.strokeRect(F.x-6,F.y-6,F.w+12,F.h+12);b.strokeStyle='#f2b33d';b.lineWidth=2;b.strokeRect(F.x,F.y,F.w,F.h);
+ const dm=(x,y)=>{b.fillStyle='#f2b33d';b.beginPath();b.moveTo(x,y-5);b.lineTo(x+4,y);b.lineTo(x,y+5);b.lineTo(x-4,y);b.fill()};
+ for(let x=F.x+12;x<F.x+F.w;x+=24){dm(x,F.y-6);dm(x,F.y+F.h+6)}for(let y=F.y+12;y<F.y+F.h;y+=24){dm(F.x-6,y);dm(F.x+F.w+6,y)}
+ b.fillStyle='#8c2a1a';b.font='bold 13px Georgia';b.textAlign='center';b.fillText('ПОЛЕ: выбей асыки за красную рамку',W/2,F.y-20);
+ b.fillStyle='#5a3a1e18';b.fillRect(0,LINE,W,H-LINE);b.setLineDash([10,8]);b.strokeStyle='#5a3a1e';b.lineWidth=2;b.beginPath();b.moveTo(0,LINE);b.lineTo(W,LINE);b.stroke();
+ b.fillStyle='#5a3a1e';b.font='12px Georgia';b.fillText('Сызық — линия броска',W/2,LINE-6)})();
+function coach(a,b){g.fillStyle='#2b1d14ee';g.beginPath();g.roundRect(24,384,352,64,12);g.fill();g.strokeStyle='#f2b33d';g.lineWidth=2;g.stroke();g.textAlign='center';g.fillStyle='#ffe9b0';g.font='bold 17px Georgia';g.fillText(a,W/2,411);g.font='14px Georgia';g.fillStyle='#f6ecd6';g.fillText(b||'',W/2,433)}
+function asyk(a,al,sc){g.globalAlpha=al*.8;g.fillStyle='#0004';g.beginPath();g.ellipse(a.x+3,a.y+6,10*sc,13*sc,0,0,7);g.fill();
+ g.save();g.translate(a.x,a.y);g.rotate(a.ang);g.scale(sc,sc);g.globalAlpha=al;
+ const gr=g.createLinearGradient(-9,-13,9,13);gr.addColorStop(0,'#fffaf0');gr.addColorStop(1,'#d8c294');g.fillStyle=gr;g.strokeStyle='#8a6a3b';g.lineWidth=2;
+ g.beginPath();g.roundRect(-9,-13,18,26,8);g.fill();g.stroke();g.beginPath();g.moveTo(-5,-5);g.quadraticCurveTo(0,0,-5,5);g.moveTo(5,-5);g.quadraticCurveTo(0,0,5,5);g.stroke();
+ g.fillStyle='#fff9';g.beginPath();g.ellipse(-4,-7,2,4,0,0,7);g.fill();g.restore();g.globalAlpha=1}
+function draw(){
+ g.save();if(SH>.3){g.translate((Math.random()-.5)*SH,(Math.random()-.5)*SH);SH*=.88}g.drawImage(BG,0,0);const s=S.saka,t=performance.now()/1000;
+ for(const a of S.asy)if(a.fade>0)asyk(a,a.out?a.fade:1,a.out?a.fade:1);
+ if(S.tut&&S.phase==='aim'&&!drag&&S.tn===0){const p=(performance.now()%2600)/2600,k=Math.min(p/.55,1),e=k*k*(3-2*k),fy=s.y+e*72;
+  g.strokeStyle='#fff9';g.lineWidth=3;g.beginPath();g.moveTo(s.x,s.y);g.lineTo(s.x,fy);g.stroke();
+  g.fillStyle='#fffd';g.beginPath();g.arc(s.x,fy,16,0,7);g.fill();g.strokeStyle='#8c2a1a';g.lineWidth=2;g.stroke();
+  if(p>.55){const q=(p-.55)/.45;for(let i=0;i<8;i++){g.fillStyle=`rgba(179,38,30,${1-q})`;g.beginPath();g.arc(s.x,s.y-30-i*30-q*60,4,0,7);g.fill()}}}
+ if(drag&&S.phase==='aim'){const dx=s.x-drag.x,dy=s.y-drag.y,l=Math.hypot(dx,dy);
+  if(l>=14){const pw=Math.min(l,MAXP)/MAXP,ux=dx/l,uy=dy/l,col=`hsl(${120-120*pw},80%,42%)`;
+   for(let i=1;i<=14;i++){if(i*26*pw>MAXP*5.1)break;const d=i*26*pw+16;g.fillStyle='#fffc';g.beginPath();g.arc(s.x+ux*d,s.y+uy*d,5,0,7);g.fill();g.fillStyle=col;g.beginPath();g.arc(s.x+ux*d,s.y+uy*d,3.5,0,7);g.fill()}
+   const fx=s.x-ux*Math.min(l,MAXP),fy=s.y-uy*Math.min(l,MAXP);g.strokeStyle='#3b2818aa';g.lineWidth=3;g.beginPath();g.moveTo(s.x,s.y);g.lineTo(fx,fy);g.stroke();
+   g.fillStyle='#fff8';g.beginPath();g.arc(fx,fy,15,0,7);g.fill();
+   g.fillStyle='#0005';g.fillRect(W/2-60,H-22,120,9);g.fillStyle=col;g.fillRect(W/2-60,H-22,120*pw,9);g.fillStyle='#3b2818';g.font='11px Georgia';g.textAlign='center';g.fillText('сила',W/2,H-27)}}
+ if(S.phase==='aim'&&!drag){g.strokeStyle='#f2b33d';g.globalAlpha=.6;g.lineWidth=2;g.beginPath();g.arc(s.x,s.y,27+3*Math.sin(t*4),0,7);g.stroke();g.globalAlpha=1}
+ g.fillStyle='#0004';g.beginPath();g.ellipse(s.x+3,s.y+7,15,19,0,0,7);g.fill();
+ g.save();g.translate(s.x,s.y);const sg=g.createLinearGradient(-13,-17,13,17);sg.addColorStop(0,'#d8402f');sg.addColorStop(1,'#8c1a12');g.fillStyle=sg;g.strokeStyle='#f2b33d';g.lineWidth=3;
+ g.beginPath();g.roundRect(-13,-17,26,34,11);g.fill();g.stroke();g.lineWidth=2;g.beginPath();g.moveTo(-8,0);g.lineTo(0,-9);g.lineTo(8,0);g.lineTo(0,9);g.closePath();g.stroke();
+ g.fillStyle='#fff5';g.beginPath();g.ellipse(-6,-9,3,6,0,0,7);g.fill();g.restore();
+ for(const q of P){g.globalAlpha=Math.max(0,q.l);g.fillStyle=q.c;g.fillRect(q.x-2,q.y-2,4,4)}g.globalAlpha=1;
+ if(S.tut&&S.phase==='aim'){if(drag){const l=Math.hypot(s.x-drag.x,s.y-drag.y);l<14?coach('Тяни дальше вниз'):coach('Красные точки — путь сақа','Отпусти палец — бросок!')}else S.tn===0?coach('1. Нажми и тяни ВНИЗ от сақа','как рогатку: чем дальше, тем сильнее удар'):coach('Не попал? Тяни точнее или сильнее','Цель: выбить асыки за красную рамку')}
+ if(S.mt>0){g.globalAlpha=Math.min(1,S.mt);g.font='bold 26px Georgia';g.textAlign='center';g.lineWidth=5;g.strokeStyle='#2b1d14';g.strokeText(S.msg,W/2,90);g.fillStyle='#ffe9b0';g.fillText(S.msg,W/2,90);g.globalAlpha=1}
+ g.restore();hud.innerHTML=`<span>Этап <b>${Math.min(S.lv+1,3)}/3</b></span><span>Броски <b>${S.throws}</b></span><span>Очки <b>${S.score}</b></span><span>Рекорд <b>${best}</b></span>`}
+let last=0,acc=0;
+function loop(t){requestAnimationFrame(loop);const dt=Math.min(.1,(t-last)/1000||0);last=t;
+ if(S.mt>0)S.mt-=dt;for(const q of P){q.x+=q.vx*dt;q.y+=q.vy*dt;q.vx*=.96;q.vy*=.96;q.l-=dt*1.6}for(let i=P.length;i--;)if(P[i].l<=0)P.splice(i,1);
+ if(S.phase==='fly'){acc+=dt;while(acc>=1/120){step(1/120);acc-=1/120}
+  if([S.saka,...S.asy].every(b=>b.out||(b.vx===0&&b.vy===0)))endThrow()}
+ draw()}
+
+/* ===== Облако (Supabase): впишите URL и anon key, см. README ===== */
+const SB_URL='',SB_KEY='';
+const sb=(SB_URL&&SB_KEY&&window.supabase)?supabase.createClient(SB_URL,SB_KEY):null;
+const $=id=>document.getElementById(id);
+let user=null,saved=null;
+try{saved=JSON.parse(localStorage.getItem('asyk_state'))}catch(e){}
+function setSaved(o){saved=o;try{o?localStorage.setItem('asyk_state',JSON.stringify(o)):localStorage.removeItem('asyk_state')}catch(e){}cloudSave()}
+async function cloudSave(){if(!sb||!user)return;try{await sb.from('progress').upsert({user_id:user.id,best,lv:saved?saved.lv:0,score:saved?saved.score:0,clears:saved?saved.clears||0:0,in_round:!!saved,seen:!!seen(),updated_at:new Date().toISOString()})}catch(e){}}
+async function cloudLoad(){if(!sb||!user)return;try{const{data}=await sb.from('progress').select('*').eq('user_id',user.id).maybeSingle();
+ if(data){best=Math.max(best,data.best);saved=data.in_round?{lv:data.lv,score:data.score,clears:data.clears}:null;if(data.seen)try{localStorage.setItem('asyk_seen',1)}catch(e){}}else cloudSave()}catch(e){}}
+async function saveResult(){const r={score:S.score,stages:S.clears,created_at:new Date().toISOString()};let h=[];
+ try{h=JSON.parse(localStorage.getItem('asyk_hist'))||[]}catch(e){}h.unshift(r);try{localStorage.setItem('asyk_hist',JSON.stringify(h.slice(0,10)))}catch(e){}
+ if(sb&&user)try{await sb.from('results').insert({user_id:user.id,score:r.score,stages:r.stages})}catch(e){}}
+function cont(){S.tut=false;S.lv=saved.lv;S.score=saved.score;S.clears=saved.clears||0;S.carry=saved.carry||0;ov.style.display='none';loadLevel()}
+function menu(){ov.style.display='flex';ov.innerHTML=`<div class="p"><h1>Асық ату</h1><div class="sub">казахская игра на меткость</div>
+<ul><li>Тяни сақа <b>назад</b>, как рогатку, и отпусти.</li><li>Выбей асыки <b>за красную рамку</b> поля.</li><li>Комбо и чистое поле дают бонусы. 3 этапа.</li></ul>
+<div class="sub">${sb?(user?'Игрок: '+user.email:'Гость'):'Локальный режим'} · Рекорд: ${best} · v14</div>
+${saved?`<button id="ct">Продолжить: этап ${saved.lv+1}, ${saved.score} очк.</button>`:''}<button id="go"${saved?' class="alt"':''}>${saved?'Новая игра':'Играть'}</button><button id="tu" class="alt">Играть с подсказками</button><button id="hs" class="alt">Мои результаты</button>${sb?`<button id="au" class="alt">${user?'Выйти':'Войти / Регистрация'}</button>`:''}</div>`;
+ $('go').onclick=()=>start(!seen());$('tu').onclick=()=>start(true);$('hs').onclick=historyScreen;if(saved)$('ct').onclick=cont;
+ if(sb)$('au').onclick=user?async()=>{await sb.auth.signOut();user=null;menu()}:()=>authScreen()}
+async function historyScreen(){ov.innerHTML=`<div class="p"><h2>Мои результаты</h2><div id="hl" class="sub">Загрузка…</div><button id="bk" class="alt">Назад</button></div>`;$('bk').onclick=menu;let d=[];
+ try{if(sb&&user){const r=await sb.from('results').select('score,stages,created_at').eq('user_id',user.id).order('created_at',{ascending:false}).limit(10);if(r.error)throw r.error;d=r.data}else d=JSON.parse(localStorage.getItem('asyk_hist'))||[]}catch(e){$('hl').textContent='Не удалось загрузить';return}
+ $('hl').innerHTML=d.length?'<table style="width:100%;font-size:14px">'+d.map(r=>`<tr><td>${new Date(r.created_at).toLocaleDateString('ru')}</td><td>этапов: ${r.stages}</td><td><b>${r.score}</b></td></tr>`).join('')+'</table>':'Пока нет сыгранных раундов'}
+function authScreen(msg){ov.innerHTML=`<div class="p"><h2>Вход</h2><input id="em" type="email" placeholder="Email"><input id="pw" type="password" placeholder="Пароль (мин. 6 символов)"><div class="sub" id="am">${msg||''}</div><button id="li">Войти</button><button id="su" class="alt">Регистрация</button><button id="bk" class="alt">Назад</button></div>`;
+ const cr=()=>({email:$('em').value.trim(),password:$('pw').value});
+ $('li').onclick=async()=>{const{data,error}=await sb.auth.signInWithPassword(cr());if(error)$('am').textContent=error.message;else{user=data.user;await cloudLoad();menu()}};
+ $('su').onclick=async()=>{const{data,error}=await sb.auth.signUp(cr());if(error)$('am').textContent=error.message;else if(!data.session)$('am').textContent='Подтверди email по письму, затем войди';else{user=data.session.user;await cloudSave();menu()}};$('bk').onclick=menu}
+async function initAuth(){if(!sb)return;try{const{data}=await sb.auth.getSession();user=data.session?data.session.user:null;await cloudLoad();menu()}catch(e){}}
+fit();menu();requestAnimationFrame(loop);initAuth();
+</script></body></html>
